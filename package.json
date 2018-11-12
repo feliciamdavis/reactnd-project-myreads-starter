@@ -1,11 +1,14 @@
 {
+  "name": "myreads-app",
   "dependencies": {
     "prop-types": "^15.6.1",
     "react": "^16.3.2",
     "react-dom": "^16.3.2"
   },
   "devDependencies": {
-    "react-scripts": "1.1.4"
+    "react-scripts": "1.1.4",
+    "eslint": "^5.9.0",
+    "babel-eslint": "^10.0.1"
   },
   "scripts": {
     "start": "react-scripts start",
