@@ -3,14 +3,26 @@ import { BrowserRouter, Route, Link } from 'react-router-dom'
 import * as BooksAPI from './BooksAPI'
 import './App.css'
 
-window.BooksAPI=BooksAPI
+window.BooksAPI = BooksAPI
 
+// Based on: https://reactjs.org/docs/forms.html#the-select-tag
 class BookShelfChanger extends React.Component {
+
+    constructor(props) {
+        super(props)
+
+        this.handleChange = this.handleChange.bind(this)
+    }
+
+    handleChange(event) {
+        const newShelf = event.target.value
+        this.props.notifyChange(newShelf)
+    }
 
     render() {
         return (
             <div className="book-shelf-changer">
-                <select>
+                <select value={this.props.shelf} onChange={this.handleChange}>
                     <option value="move" disabled>Move to...</option>
                     <option value="currentlyReading">Currently Reading</option>
                     <option value="wantToRead">Want to Read</option>
@@ -25,12 +37,29 @@ class BookShelfChanger extends React.Component {
 
 class Book extends React.Component {
 
+    constructor(props) {
+        super(props)
+        this.handleShelfChange = this.handleShelfChange.bind(this)
+    }
+
+    handleShelfChange(newShelf) {
+        this.props.notifyChange(this.props.id, {
+            shelf: newShelf
+        })
+    }
+
     render() {
+        let coverURL = ''
+        const imageLinks = this.props.imageLinks
+        if (imageLinks) {
+            coverURL = imageLinks.smallThumbnail
+        }
+
         return (
             <div className="book">
                 <div className="book-top">
-                    <div className="book-cover" style={{ width: 128, height: 188, backgroundImage: `url("${this.props.coverURL}")` }}></div>
-                    <BookShelfChanger />
+                    <div className="book-cover" style={{ width: 128, height: 188, backgroundImage: `url("${coverURL}")` }}></div>
+                    <BookShelfChanger shelf={this.props.shelf} notifyChange={this.handleShelfChange} />
                 </div>
                 <div className="book-title">{this.props.title}</div>
                 <div className="book-authors">{
@@ -47,7 +76,62 @@ class Book extends React.Component {
 class SearchPage extends React.Component {
 
     state = {
-        books: []
+        searchResults: []
+    }
+
+    constructor(props) {
+        super(props)
+        this.handleBookChange = this.handleBookChange.bind(this)
+        this.handleSearchChange = this.handleSearchChange.bind(this)
+    }
+
+    handleBookChange(bookID, bookChanges) {
+        const book = this.state.searchResults.find(book => book.id === bookID)
+        this.props.notifyBookChange(bookID, bookChanges, book)
+    }
+
+    handleSearchChange(event) {
+        const inputEl = event.target
+        const searchTerms = inputEl.value
+        if (searchTerms) {
+            BooksAPI.search(searchTerms).then(results => {
+
+                // if search terms are not still the same then ignore these search results
+                const isSameSearch = (searchTerms === inputEl.value)
+                if (!isSameSearch) {
+                    return
+                }
+
+                // update search results if no error or empty list if something bad happened
+                if (!results.error) {
+                    this.setState({
+                        searchResults: results
+                    })
+                }
+                else {
+                    this.setState({
+                        searchResults: []
+                    })
+                }
+
+            })
+        }
+        else {
+            // no search terms, no books -- deal with it
+            this.setState({
+                searchResults: []
+            })
+        }
+    }
+
+    getShelfForBook(searchResultsBook) {
+        const myBook = this.props.books.find(book => book.id === searchResultsBook.id)
+
+        if(myBook) {
+            return myBook.shelf
+        }
+
+        return 'none'
     }
 
     render() {
@@ -56,62 +140,17 @@ class SearchPage extends React.Component {
                 <div className="search-books-bar">
                     <Link className="close-search" to="/">Close</Link>
                     <div className="search-books-input-wrapper">
-                        {/*
-                        NOTES: The search from BooksAPI is limited to a particular set of search terms.
-                        You can find these search terms here:
-                        https://github.com/udacity/reactnd-project-myreads-starter/blob/master/SEARCH_TERMS.md
-
-                        However, remember that the BooksAPI.search method DOES search by title or author. So, don't worry if
-                        you don't find a specific author or title. Every search is limited by search terms.
-                        */}
-                        <input type="text" placeholder="Search by title or author" onChange={(event) => {
-                            const inputEl = event.target
-                            const searchTerms = inputEl.value
-                            if (searchTerms) {
-                                BooksAPI.search(searchTerms).then((results = []) => {
-                                    const isSameSearch = (searchTerms === inputEl.value)
-                                    if (!isSameSearch) {
-                                        return
-                                    }
-                                    if (!results.error) {
-                                        this.setState({
-                                            books: results
-                                        })
-                                    }
-                                    else {
-                                        this.setState({
-                                            books: []
-                                        })
-                                    }
-                                })
-                            }
-                            else {
-                                this.setState({
-                                    books: []
-                                })
-                            }
-                        }} />
-
+                        <input type="text" placeholder="Search by title or author" onChange={this.handleSearchChange} />
                     </div>
                 </div>
                 <div className="search-books-results">
                     <ol className="books-grid">
                         {
-                            this.state.books.map(bookData => {
-
-                                let coverURL = ''
-                                const imageLinks = bookData.imageLinks
-                                if (imageLinks) {
-                                    coverURL = imageLinks.smallThumbnail
-                                }
-
+                            this.state.searchResults.map(bookData => {
+                                const shelf = this.getShelfForBook(bookData)
                                 return (
                                     <li key={bookData.id}>
-                                        <Book
-                                            coverURL={coverURL}
-                                            title={bookData.title}
-                                            authors={bookData.authors}
-                                        />
+                                        <Book {...bookData} shelf={shelf} notifyChange={this.handleBookChange} />
                                     </li>
                                 )
                             })
@@ -126,7 +165,18 @@ class SearchPage extends React.Component {
 
 class MainPage extends React.Component {
 
+    constructor(props) {
+        super(props)
+        this.handleBookChange = this.props.notifyBookChange
+    }
+
     render() {
+        const books = this.props.books
+
+        const currentlyReading = books.filter(book => book.shelf === 'currentlyReading')
+        const wantToRead = books.filter(book => book.shelf === 'wantToRead')
+        const read = books.filter(book => book.shelf === 'read')
+
         return (
             <div className="list-books">
                 <div className="list-books-title">
@@ -138,26 +188,16 @@ class MainPage extends React.Component {
                             <h2 className="bookshelf-title">Currently Reading</h2>
                             <div className="bookshelf-books">
                                 <ol className="books-grid">
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 193, backgroundImage: 'url("http://books.google.com/books/content?id=PGR2AwAAQBAJ&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE73-GnPVEyb7MOCxDzOYF1PTQRuf6nCss9LMNOSWBpxBrz8Pm2_mFtWMMg_Y1dx92HT7cUoQBeSWjs3oEztBVhUeDFQX6-tWlWz1-feexS0mlJPjotcwFqAg6hBYDXuK_bkyHD-y&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">To Kill a Mockingbird</div>
-                                            <div className="book-authors">Harper Lee</div>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 188, backgroundImage: 'url("http://books.google.com/books/content?id=yDtCuFHXbAYC&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE72RRiTR6U5OUg3IY_LpHTL2NztVWAuZYNFE8dUuC0VlYabeyegLzpAnDPeWxE6RHi0C2ehrR9Gv20LH2dtjpbcUcs8YnH5VCCAH0Y2ICaKOTvrZTCObQbsfp4UbDqQyGISCZfGN&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">Ender's Game</div>
-                                            <div className="book-authors">Orson Scott Card</div>
-                                        </div>
-                                    </li>
+                                    {
+                                        currentlyReading.map(bookData => {
+                                            return (
+                                                <li key={bookData.id}>
+                                                    <Book {...bookData} notifyChange={this.handleBookChange} />
+                                                </li>
+                                            )
+                                        })
+                                    }
+
                                 </ol>
                             </div>
                         </div>
@@ -165,26 +205,15 @@ class MainPage extends React.Component {
                             <h2 className="bookshelf-title">Want to Read</h2>
                             <div className="bookshelf-books">
                                 <ol className="books-grid">
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 193, backgroundImage: 'url("http://books.google.com/books/content?id=uu1mC6zWNTwC&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE73pGHfBNSsJG9Y8kRBpmLUft9O4BfItHioHolWNKOdLavw-SLcXADy3CPAfJ0_qMb18RmCa7Ds1cTdpM3dxAGJs8zfCfm8c6ggBIjzKT7XR5FIB53HHOhnsT7a0Cc-PpneWq9zX&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">1776</div>
-                                            <div className="book-authors">David McCullough</div>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 192, backgroundImage: 'url("http://books.google.com/books/content?id=wrOQLV6xB-wC&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE72G3gA5A-Ka8XjOZGDFLAoUeMQBqZ9y-LCspZ2dzJTugcOcJ4C7FP0tDA8s1h9f480ISXuvYhA_ZpdvRArUL-mZyD4WW7CHyEqHYq9D3kGnrZCNiqxSRhry8TiFDCMWP61ujflB&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">Harry Potter and the Sorcerer's Stone</div>
-                                            <div className="book-authors">J.K. Rowling</div>
-                                        </div>
-                                    </li>
+                                    {
+                                        wantToRead.map(bookData => {
+                                            return (
+                                                <li key={bookData.id}>
+                                                    <Book {...bookData} notifyChange={this.handleBookChange} />
+                                                </li>
+                                            )
+                                        })
+                                    }
                                 </ol>
                             </div>
                         </div>
@@ -192,29 +221,15 @@ class MainPage extends React.Component {
                             <h2 className="bookshelf-title">Read</h2>
                             <div className="bookshelf-books">
                                 <ol className="books-grid">
-                                    <li>
-                                        <Book coverURL="" title="hobbits" authors={['tolkien']} />
-                                    </li>
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 174, backgroundImage: 'url("http://books.google.com/books/content?id=1q_xAwAAQBAJ&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE712CA0cBYP8VKbEcIVEuFJRdX1k30rjLM29Y-dw_qU1urEZ2cQ42La3Jkw6KmzMmXIoLTr50SWTpw6VOGq1leINsnTdLc_S5a5sn9Hao2t5YT7Ax1RqtQDiPNHIyXP46Rrw3aL8&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">Oh, the Places You'll Go!</div>
-                                            <div className="book-authors">Seuss</div>
-                                        </div>
-                                    </li>
-                                    <li>
-                                        <div className="book">
-                                            <div className="book-top">
-                                                <div className="book-cover" style={{ width: 128, height: 192, backgroundImage: 'url("http://books.google.com/books/content?id=32haAAAAMAAJ&printsec=frontcover&img=1&zoom=1&imgtk=AFLRE72yckZ5f5bDFVIf7BGPbjA0KYYtlQ__nWB-hI_YZmZ-fScYwFy4O_fWOcPwf-pgv3pPQNJP_sT5J_xOUciD8WaKmevh1rUR-1jk7g1aCD_KeJaOpjVu0cm_11BBIUXdxbFkVMdi&source=gbs_api")' }}></div>
-                                                <BookShelfChanger />
-                                            </div>
-                                            <div className="book-title">The Adventures of Tom Sawyer</div>
-                                            <div className="book-authors">Mark Twain</div>
-                                        </div>
-                                    </li>
+                                    {
+                                        read.map(bookData => {
+                                            return (
+                                                <li key={bookData.id}>
+                                                    <Book {...bookData} notifyChange={this.handleBookChange} />
+                                                </li>
+                                            )
+                                        })
+                                    }
                                 </ol>
                             </div>
                         </div>
@@ -230,13 +245,55 @@ class MainPage extends React.Component {
 
 class BooksApp extends React.Component {
 
+    state = {
+        books: []
+    }
+
+    constructor(props) {
+        super(props)
+        BooksAPI.getAll().then(results => {
+            this.setState({
+                books: results
+            })
+        })
+        this.handleBookChange = this.handleBookChange.bind(this)
+    }
+
+    handleBookChange(bookID, bookChanges, newBook) {
+        const foundBook = this.state.books.find(book => book.id === bookID)
+        const book = foundBook || newBook
+
+        // apply changes to book
+        Object.assign(book, bookChanges)
+
+        // if changing the book shelf, update the shelf on the server
+        if (bookChanges.shelf) {
+            BooksAPI.update(book, bookChanges.shelf).then(() => {
+                console.log(`Moved ${book.title} to ${bookChanges.shelf}`)
+            })
+        }
+
+        // add new book to library if not found
+        if (!foundBook) {
+            this.state.books.push(book)
+        }
+
+        // update state to show changes to books in library
+        this.setState({
+            books: this.state.books
+        })
+    }
+
     render() {
-        /** add JS to check url has search page */
         return (
             <BrowserRouter>
                 <div className="app">
-                    <Route exact path="/" component={MainPage} />
-                    <Route path="/search" component={SearchPage} />
+                    <Route exact path="/" render={() => {
+                        return <MainPage books={this.state.books} notifyBookChange={this.handleBookChange} />
+                    }} />
+                    <Route path="/search" render={() => {
+                        return <SearchPage books={this.state.books} notifyBookChange={this.handleBookChange} />
+                    }} />
                 </div>
             </BrowserRouter>
         )
