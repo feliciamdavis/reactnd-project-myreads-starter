@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter, Route, Link } from 'react-router-dom'
+import { HashRouter, Route, Link } from 'react-router-dom'
 import * as BooksAPI from './BooksAPI'
 import './App.css'
 
@@ -127,7 +127,7 @@ class SearchPage extends React.Component {
     getShelfForBook(searchResultsBook) {
         const myBook = this.props.books.find(book => book.id === searchResultsBook.id)
 
-        if(myBook) {
+        if (myBook) {
             return myBook.shelf
         }
 
@@ -286,7 +286,7 @@ class BooksApp extends React.Component {
 
     render() {
         return (
-            <BrowserRouter>
+            <HashRouter>
                 <div className="app">
                     <Route exact path="/" render={() => {
                         return <MainPage books={this.state.books} notifyBookChange={this.handleBookChange} />
@@ -295,7 +295,7 @@ class BooksApp extends React.Component {
                         return <SearchPage books={this.state.books} notifyBookChange={this.handleBookChange} />
                     }} />
                 </div>
-            </BrowserRouter>
+            </HashRouter>
         )
     }
 }
