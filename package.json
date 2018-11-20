@@ -7,14 +7,18 @@
     "react-router-dom": "^4.3.1"
   },
   "devDependencies": {
-    "react-scripts": "1.1.4",
+    "babel-eslint": "^10.0.1",
     "eslint": "^5.9.0",
-    "babel-eslint": "^10.0.1"
+    "gh-pages": "^2.0.1",
+    "react-scripts": "1.1.4"
   },
+  "homepage": "https://feliciamdavis.github.io/reactnd-project-myreads-starter/",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build"
   }
 }
